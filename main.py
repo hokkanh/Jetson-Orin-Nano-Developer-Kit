@@ -1,2 +1,2 @@
 # testing emt
-print("Hello world")
+# kulliprint("Hello world")
