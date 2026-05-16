@@ -1,91 +1,70 @@
-from dataReading import MCAPFusionReader
+from dataReading import MCAPReader
 from detection import YOLODetector
 from visualization import Visualizer
 import cv2
 import numpy as np
 
 def main():
-    print("=== KÄYNNISTETÄÄN ULTRA-OPTIMOITU SENSOR FUSION ===")
-    tiedosto = "dualtarget.mcap"
+    # Varmista, että tämä tiedosto löytyy data/mcap_files/ -kansiosta!
+    tiedosto = "flyover.mcap" 
 
-    # Yksi lukija hoitaa koko tiedoston sekunneissa
-    lukija = MCAPFusionReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto)
+    print("=== VAIHE 1: TAKTINEN HUD (Infrapuna + YOLO) ===")
+    lukija_infra = MCAPReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto, topic="/camera/camera/infra1/image_rect_raw")
     aivot = YOLODetector()
     silmat = Visualizer()
-
-    # Välimuisti (Cache) uusimmille ruuduille
-    viimeisin_infra = None
-    viimeisin_syvyys = None
-    esteet = []
-    infra_laskuri = 0
-    paivitys_vali = 5  # YOLO ajetaan vain joka 5. ruutu (80% GPU-säästö!)
-
-    for tyyppi, kuva in lukija.lue_synkronoitu_virta():
-        if tyyppi == "infra":
-            viimeisin_infra = kuva
-            infra_laskuri += 1
+    
+    kuva_laskuri = 0
+    viimeisimmat_esteet = []
+    
+    for raakakuva in lukija_infra.lue_kuvat_generaattorina():
+        kuva_laskuri += 1
+        
+        if kuva_laskuri % 3 == 0:
+            viimeisimmat_esteet = aivot.etsi_esteet(raakakuva)
             
-            # Ajetaan raskas tekoäly vain sykleissä
-            if infra_laskuri % paivitys_vali == 0:
-                esteet = aivot.etsi_esteet(viimeisin_infra)
-                
-            # Jos meillä on molemmat sensoritiedot valmiina, piirretään HUD lennosta
-            if viimeisin_infra is not None and viimeisin_syvyys is not None:
-                hud_kuva = cv2.cvtColor(viimeisin_infra, cv2.COLOR_GRAY2BGR)
-                korkeus, leveys = hud_kuva.shape[:2]
-                
-                for este in esteet:
-                    x_keski = este["x"]
-                    y_keski = este["y"]
-                    w = este["w"]
-                    h = este["h"]
-                    
-                    # --- ULTRA-NOPEA ETÄISYYDEN NOUTO (Ei array-allokaatioita) ---
-                    # Luetaan suoraan keskipisteestä
-                    z = viimeisin_syvyys[y_keski, x_keski]
-                    
-                    # Jos keskipiste oli sokea (0), katsotaan nopeasti 4 naapuripikseliä ympäriltä
-                    if z == 0:
-                        for dy, dx in [(-3, 0), (3, 0), (0, -3), (0, 3)]:
-                            ny = max(0, min(korkeus - 1, y_keski + dy))
-                            nx = max(0, min(leveys - 1, x_keski + dx))
-                            nz = viimeisin_syvyys[ny, nx]
-                            if nz > 0:
-                                z = nz
-                                break
-                    
-                    # Muutetaan metreiksi
-                    etaisyys_m = z / 1000.0 if z > 0 else -1.0
-                    
-                    # --- PIIRTÄMINEN ---
-                    x_min = int(x_keski - (w / 2))
-                    y_min = int(y_keski - (h / 2))
-                    x_max = int(x_keski + (w / 2))
-                    y_max = int(y_keski + (h / 2))
-                    
-                    # Aina siisti, luotettava vihreä laatikko
-                    cv2.rectangle(hud_kuva, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-                    
-                    # Tulostetaan vain kohteen nimi ja tarkka 3D-etäisyys
-                    if etaisyys_m > 0:
-                        teksti = f"IHMINEN: {etaisyys_m:.2f}m"
-                    else:
-                        teksti = "IHMINEN: ETaISYYS HUKASSA"
-                        
-                    cv2.putText(hud_kuva, teksti, (x_min, y_min - 10), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                
-                # Näytetään valmis HUD salamannopeasti (Odotus 1ms = maksiminopeus)
-                cv2.imshow("3D Ultra-HUD", hud_kuva)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-                    
-        elif tyyppi == "depth":
-            # Päivitetään syvyyskartta välimuistiin taustalla
-            viimeisin_syvyys = kuva
+        nappain = silmat.piirra_hud(raakakuva, viimeisimmat_esteet)
+        if nappain == ord('q'):
+            print("Vaihe 1 keskeytetty manuaalisesti.")
+            break
 
     cv2.destroyAllWindows()
-    print("Suoritus päättynyt.")
+
+
+    print("\n=== VAIHE 2: SYVYYSKAMERA JA KIRURGINEN PAIKKAUS ===")
+    lukija_syvyys = MCAPReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto, topic="/camera/camera/depth/image_rect_raw")
+    
+    for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
+        
+        # 1. Skaalataan data 8-bittiseksi
+        skaalattu = np.clip(syvyyskuva * (255.0 / 8000.0), 0, 255).astype(np.uint8)
+
+        # --- SIGNAALINKÄSITTELY 5.0: REUNAPUHDISTUS JA LAAJENNETTU PAIKKAUS ---
+        
+        # VAIHE A: Etsitään sokeat pisteet ja virheelliset nollakohdat (alle 5 arvoiset pikselit)
+        _, pohjamaski = cv2.threshold(skaalattu, 5, 255, cv2.THRESH_BINARY_INV)
+
+        # VAIHE B: Laajennetaan maskia (Dilation), jotta puiden ja reunojen siniset "haamupikselit" saadaan kiinni
+        ydin = np.ones((5, 5), np.uint8)
+        maski = cv2.dilate(pohjamaski, ydin, iterations=1)
+
+        # VAIHE C: Luodaan vahva tausta-arvaus
+        arvattu_tausta = cv2.medianBlur(skaalattu, 21)
+
+        # VAIHE D: Kirurginen siirto laajennetulle alueelle
+        paikattu_kuva = skaalattu.copy()
+        paikattu_kuva[maski == 255] = arvattu_tausta[maski == 255]
+
+        # 3. VÄRJÄYS
+        varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
+
+        # Näytetään tulos
+        cv2.imshow("Syvyyskamera (Kirurgisesti Suodatettu)", varitetty_syvyys)
+        
+        if cv2.waitKey(10) & 0xFF == ord('q'):
+            print("Vaihe 2 keskeytetty manuaalisesti.")
+            break
+
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
