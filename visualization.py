@@ -96,4 +96,4 @@ class Visualizer:
 
         # Näytetään tulos
         cv2.imshow(self.ikkunan_nimi, naytettava_kuva)
-        return cv2.waitKey(1) & 0xFF
+        return cv2.waitKey(33) & 0xFF

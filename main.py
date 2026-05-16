@@ -11,7 +11,7 @@ def main():
     silmat = Visualizer()
     
     kuva_laskuri = 0
-    paivitys_vali = 3 # Aja tekoäly vain joka 3. ruutu! (Säästää 66% Jetsonin tehosta)
+    paivitys_vali = 5 # Aja tekoäly vain joka 5. ruutu! (Säästää 80% Jetsonin tehosta)
     viimeisimmat_esteet = [] # Muistaa laatikoiden paikat väliin jätetyillä ruuduilla
     
     for raakakuva in lukija.lue_kuvat_generaattorina():
