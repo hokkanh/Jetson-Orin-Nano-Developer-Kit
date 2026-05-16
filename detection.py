@@ -49,7 +49,7 @@ class YOLODetector:
 
         # --- 2. TEKOÄLYN PÄÄTTELY ---
         # verbose=False pitää terminaalin puhtaana turhasta spämmitulosteesta
-        results = self.model(kuva_rgb, verbose=False)
+        results = self.model(kuva_rgb, verbose=False, conf=0.5)
         
         # --- 3. TULOSTEN PAKETOINTI JA OHJELMALLINEN FILTTERI ---
         loydetyt_kohteet = []
