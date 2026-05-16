@@ -29,53 +29,38 @@ def main():
     cv2.destroyAllWindows()
 
 
-    print("\n=== VAIHE 2: SYVYYSKAMERA - TAKTINEN VAARA-ALUE ===")
+    print("\n=== VAIHE 2: SYVYYSKAMERA JA KIRURGINEN PAIKKAUS ===")
     lukija_syvyys = MCAPReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto, topic="/camera/camera/depth/image_rect_raw")
     
     for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
         
-        # --- 1. SOKEIDEN PISTEIDEN KORJAUS ---
-        korjattu_syvyys = syvyyskuva.copy()
-        korjattu_syvyys[korjattu_syvyys == 0] = 10000 # Pakotetaan sokeat pisteet 10 metrin päähän
+        # 1. Skaalataan data 8-bittiseksi
+        skaalattu = np.clip(syvyyskuva * (255.0 / 8000.0), 0, 255).astype(np.uint8)
+
+        # --- SIGNAALINKÄSITTELY 5.0: REUNAPUHDISTUS JA LAAJENNETTU PAIKKAUS ---
         
-        # --- 2. VAARA-ALUEEN LEIKKAUS (Laajennettu tutka) ---
-        minimietaisyys = 500   # 0.5m (Estää dronen omien osien näkymisen)
-        maksimietaisyys = 8000 # 8m (Nyt puut näkyvät paljon aiemmin!)
-        
-        vaara_maski = cv2.inRange(korjattu_syvyys, minimietaisyys, maksimietaisyys)
+        # VAIHE A: Etsitään sokeat pisteet ja virheelliset nollakohdat (alle 5 arvoiset pikselit)
+        _, pohjamaski = cv2.threshold(skaalattu, 5, 255, cv2.THRESH_BINARY_INV)
 
-        # --- 3. UUSI ASE: HORISONTTIFILTTERI (Maan pinnan tuhoaja) ---
-        kuvan_korkeus = vaara_maski.shape[0]
-        # Määritetään, mistä maa alkaa. 0.65 tarkoittaa, että ylin 65% on ilmatilaa, alin 35% on maata.
-        maan_raja = int(kuvan_korkeus * 0.65) 
-        
-        # Pakotetaan kaikki maan_rajan alapuolella olevat pikselit mustaksi (0)
-        vaara_maski[maan_raja:kuvan_korkeus, :] = 0
+        # VAIHE B: Laajennetaan maskia (Dilation), jotta puiden ja reunojen siniset "haamupikselit" saadaan kiinni
+        # 5x5 ydin riittää syömään puiden ympärillä olevat ohuet siniset reunat
+        ydin = np.ones((5, 5), np.uint8)
+        maski = cv2.dilate(pohjamaski, ydin, iterations=1)
 
-        # --- 4. ROSKIEN SUODATUS ---
-        kernel = np.ones((7, 7), np.uint8)
-        puhdas_maski = cv2.morphologyEx(vaara_maski, cv2.MORPH_OPEN, kernel)
+        # VAIHE C: Luodaan vahva tausta-arvaus
+        # Nostetaan medianBlurin kokoa (esim. 15 tai 21), jotta puiden takana oleva 
+        # maan/suon lämmin väri (keltainen/oranssi) saadaan leviämään kunnolla reikien alle
+        arvattu_tausta = cv2.medianBlur(skaalattu, 21)
 
-        # --- 5. MUODON TUNNISTUS JA ESTEIDEN PIIRTO ---
-        contours, _ = cv2.findContours(puhdas_maski, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        naytettava_kuva = cv2.cvtColor(puhdas_maski, cv2.COLOR_GRAY2BGR)
-        
-        # Piirretään myös hieno visuaalinen viiva ruudulle näyttämään, missä horisonttifiltteri menee
-        cv2.line(naytettava_kuva, (0, maan_raja), (naytettava_kuva.shape[1], maan_raja), (255, 0, 0), 1)
-        cv2.putText(naytettava_kuva, "MAA/TUTKA OFF", (10, kuvan_korkeus - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+        # VAIHE D: Kirurginen siirto laajennetulle alueelle
+        paikattu_kuva = skaalattu.copy()
+        paikattu_kuva[maski == 255] = arvattu_tausta[maski == 255]
 
-        for cnt in contours:
-            pinta_ala = cv2.contourArea(cnt)
-            
-            if pinta_ala < 800:
-                continue
+        # 3. VÄRJÄYS (JET muuttaa nyt vain aidon datan ja siistin taustan väreiksi)
+        varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
 
-            x, y, w, h = cv2.boundingRect(cnt)
-            cv2.rectangle(naytettava_kuva, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.putText(naytettava_kuva, "ESTE", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
-        cv2.imshow("Syvyyskamera (Taktinen Vaara-alue)", naytettava_kuva)
+        # Näytetään tulos
+        cv2.imshow("Syvyyskamera (Kirurgisesti Suodatettu)", varitetty_syvyys)
         
         if cv2.waitKey(10) & 0xFF == ord('q'):
             print("Vaihe 2 keskeytetty manuaalisesti.")
