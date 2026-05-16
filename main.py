@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 def main():
-    tiedosto = "dualtarget.mcap" # Vaihda tätä halutessasi testata muita!
+    tiedosto = "flyover.mcap" # Vaihda tätä halutessasi testata muita!
 
     print("=== VAIHE 1: TAKTINEN HUD (Infrapuna + YOLO) ===")
     lukija_infra = MCAPReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto, topic="/camera/camera/infra1/image_rect_raw")
