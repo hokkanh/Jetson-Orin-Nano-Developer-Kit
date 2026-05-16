@@ -4,31 +4,31 @@ from visualization import Visualizer
 import cv2
 
 def main():
-    print("Käynnistetään järjestelmä...")
+    print("Käynnistetään taktinen HUD-järjestelmä...")
     
-    # 1. Alustetaan kaikki 3 moduulia
     lukija = MCAPReader(data_dir="data/mcap_files", kohdetiedosto="dualtarget.mcap")
     aivot = YOLODetector()
     silmat = Visualizer()
     
     kuva_laskuri = 0
+    paivitys_vali = 3 # Aja tekoäly vain joka 3. ruutu! (Säästää 66% Jetsonin tehosta)
+    viimeisimmat_esteet = [] # Muistaa laatikoiden paikat väliin jätetyillä ruuduilla
     
-    # 2. Aloitetaan datan lypsäminen generaattorilla
     for raakakuva in lukija.lue_kuvat_generaattorina():
         kuva_laskuri += 1
         
-        # Vaihe A: Aivot etsivät koordinaatit
-        esteet = aivot.etsi_esteet(raakakuva)
+        # OMINAISUUS 1: FRAME SKIPPING (Tehokkuus)
+        # Lasketaan tekoäly uudelleen vain N ruudun välein
+        if kuva_laskuri % paivitys_vali == 0:
+            viimeisimmat_esteet = aivot.etsi_esteet(raakakuva)
         
-        # Vaihe B: Silmät piirtävät tulokset ruudulle
-        nappain = silmat.piirra_hud(raakakuva, esteet)
+        # Silmät piirtävät tulokset ruudulle JOKA ruudulla, jotta video ei töki
+        nappain = silmat.piirra_hud(raakakuva, viimeisimmat_esteet)
         
-        # Jos käyttäjä painaa 'q', ohjelma sammuu turvallisesti
         if nappain == ord('q'):
             print("Käyttäjä keskeytti lennon.")
             break
 
-    # Lopuksi siivotaan ikkunat pois
     cv2.destroyAllWindows()
     print(f"Ajo suoritettu. Käsitelty {kuva_laskuri} ruutua.")
 
