@@ -37,7 +37,7 @@ class MCAPReader:
                     raakadata = bytes(img_msg.data)
                     
                     # Muutetaan raakadata Numpyn ymmärtämään muotoon (16-bit)
-                    matriisi = np.frombuffer(raakadata, dtype="<u2")
+                    matriisi = np.frombuffer(raakadata, dtype=np.uint8)
                     
                     # Muotoillaan litteä pötkö takaisin 2D-kuvaksi
                     kuva_2d = matriisi.reshape((img_msg.height, img_msg.width))
