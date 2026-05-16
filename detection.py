@@ -21,55 +21,53 @@ class YOLODetector:
 
     def etsi_esteet(self, kuva_2d):
         """
-        Ottaa sisään kuvan (Numpy-matriisi), SUODATTAA KOHINAN, 
-        hylkää liian pienet roskat ja palauttaa listan todellisista esteistä.
+        Ottaa sisään kuvan (Numpy-matriisi), SUODATTAA VARJOT POIS fysiikalla, 
+        hylkää pienet roskat ja palauttaa listan todellisista esteistä.
         """
         # --- 1. ESIKÄSITTELY JA SIGNAALINKÄSITTELY ---
         
-        # Tarkistetaan, onko kuva 1-kanavainen (syvyys/harmaasävy)
         if len(kuva_2d.shape) == 2:
-            # Muutetaan mahdollinen 16-bittinen syvyysdata 8-bittiseksi käsittelyä varten
-            if kuva_2d.dtype == np.uint16 or kuva_2d.dtype == '<u2':
-                kasiteltava_kuva = np.clip(kuva_2d * (255.0 / 8000.0), 0, 255).astype(np.uint8)
-            else:
-                kasiteltava_kuva = kuva_2d.astype(np.uint8).copy()
+            kasiteltava_kuva = kuva_2d.astype(np.uint8).copy()
 
-            # Ase 1: Tuhoaa mustat kuopat ja yksittäiset virhepikselit
-            suodatettu = cv2.medianBlur(kasiteltava_kuva, 5)
+            # ASE 1: CLAHE - Nostetaan oikeat kohteet esiin taustasta
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            kontrasti_kuva = clahe.apply(kasiteltava_kuva)
 
-            # Ase 2: Tuhoaa pienet roskat ja pöllyävät lehdet (Morfologinen avaus)
+            # ASE 2: VARJON TAPPAJA (Threshold - Kynnystys)
+            # THRESH_TOZERO tarkoittaa: "Jos pikselin arvo on alle 40 (musta varjo), muuta se täysin mustaksi (0)."
+            # Voit joutua säätämään tätä numeroa 40 joko ylös (esim 60) tai alas (esim 20)
+            _, suodatettu = cv2.threshold(kontrasti_kuva, 40, 255, cv2.THRESH_TOZERO)
+
+            # ASE 3: Roskien siivous (Mediaanifiltteri ja Morfologia)
+            suodatettu = cv2.medianBlur(suodatettu, 5)
             kernel = np.ones((5, 5), np.uint8)
             suodatettu = cv2.morphologyEx(suodatettu, cv2.MORPH_OPEN, kernel)
 
-            # Muutetaan suodatettu kuva YOLOa varten 3-kanavaiseksi (RGB)
+            # Muutetaan YOLOa varten väriksi
             kuva_rgb = cv2.cvtColor(suodatettu, cv2.COLOR_GRAY2RGB)
         else:
-            # Jos kuva on jo valmiiksi värikuva (RGB)
             kuva_rgb = kuva_2d.copy()
 
         # --- 2. TEKOÄLYN PÄÄTTELY ---
-        # verbose=False pitää terminaalin puhtaana turhasta spämmitulosteesta
-        results = self.model(kuva_rgb, verbose=False)
+        # Laskettiin conf-arvoa takaisin hieman, koska varjot tapetaan nyt yläpuolella!
+        results = self.model(kuva_rgb, verbose=False, conf=0.35)
         
         # --- 3. TULOSTEN PAKETOINTI JA OHJELMALLINEN FILTTERI ---
         loydetyt_kohteet = []
         
         for r in results:
             for box in r.boxes:
-                # YOLO palauttaa xywh = x_center, y_center, width, height
                 koordinaatit = box.xywh[0].tolist()
                 leveys = int(koordinaatit[2])
                 korkeus = int(koordinaatit[3])
                 
-                # OHJELMALLINEN FILTTERI: Hylätään fyysisesti liian pienet laatikot
-                # Jos bounding box on alle 15x15 pikseliä, se on joko roska tai liian kaukana
+                # OHJELMALLINEN FILTTERI: Hylätään fyysisesti liian pienet (alle 15x15)
                 if leveys < 15 or korkeus < 15:
                     continue
                 
                 luokka_id = int(box.cls[0].item())
                 varmuus = float(box.conf[0].item())
                 
-                # Rakennetaan helppolukuinen sanakirja jokaisesta löydetystä kohteesta
                 loydetyt_kohteet.append({
                     "luokka": luokka_id,
                     "varmuus": varmuus,
