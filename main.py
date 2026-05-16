@@ -29,36 +29,42 @@ def main():
     cv2.destroyAllWindows()
 
 
-    print("\n=== VAIHE 2: SYVYYSKAMERA JA LEHTIEN SUODATUS ===")
-    # Nyt luetaan sama tiedosto, mutta depth-kanavalta!
+    print("\n=== VAIHE 2: SYVYYSKAMERA JA KIRURGINEN PAIKKAUS ===")
     lukija_syvyys = MCAPReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto, topic="/camera/camera/depth/image_rect_raw")
     
     for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
         
-        # 1. Puristetaan 16-bittinen syvyysdata näytettävään 8-bittiseen muotoon
-        # Arvo 8000.0 tarkoittaa, että maksimietäisyys on 8 metriä (kaikki sen yli on mustaa)
+        # 1. Skaalataan data 8-bittiseksi
         skaalattu = np.clip(syvyyskuva * (255.0 / 8000.0), 0, 255).astype(np.uint8)
 
-        # 2. SIGNAALINKÄSITTELY: Pöllyävien lehtien ja reikäisen kohinan tuhoaminen
-        # Ase 1: Mediaanisuodatin (Korjaa yksittäiset virhepikselit)
-        suodatettu = cv2.medianBlur(skaalattu, 5)
+        # --- SIGNAALINKÄSITTELY 4.0: KIRURGINEN REIKIEN PAIKKAUS ---
         
-        # Ase 2: Morfologinen avaus (Syö pois lehdet, mutta jättää isot esteet)
-        kernel = np.ones((5, 5), np.uint8)
-        suodatettu = cv2.morphologyEx(suodatettu, cv2.MORPH_OPEN, kernel)
+        # VAIHE A: Etsitään sokeat pisteet (siniset läiskät eli arvot alle 5)
+        # Luodaan "maski", jossa reiät ovat valkoisia ja terve data mustaa
+        _, maski = cv2.threshold(skaalattu, 5, 255, cv2.THRESH_BINARY_INV)
 
-        # 3. VÄRJÄYS: Tehdään syvyyskartasta tyylikäs värikartta (Lämpökamera-tyyli)
-        varitetty_syvyys = cv2.applyColorMap(suodatettu, cv2.COLORMAP_JET)
+        # VAIHE B: Luodaan arvaus taustasta
+        # Ajetaan massiivinen (9x9) mediaanisuodatin. Se sumentaa kuvan, mutta 
+        # tuhoaa siniset reiät täysin jättäen vain punaoranssia väriä.
+        arvattu_tausta = cv2.medianBlur(skaalattu, 9)
+
+        # VAIHE C: Kirurginen siirto
+        # Otetaan alkuperäinen kuva, mutta TÄYTETÄÄN reiät arvatulla taustalla.
+        # Tämä koskee VAIN niitä sinisiä pisteitä, muu kuva pysyy millimetrin tarkkana!
+        paikattu_kuva = skaalattu.copy()
+        paikattu_kuva[maski == 255] = arvattu_tausta[maski == 255]
+
+        # 3. VÄRJÄYS
+        varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
 
         # Näytetään tulos
-        cv2.imshow("Syvyyskamera (Suodatettu)", varitetty_syvyys)
+        cv2.imshow("Syvyyskamera (Kirurgisesti Suodatettu)", varitetty_syvyys)
         
         if cv2.waitKey(10) & 0xFF == ord('q'):
             print("Vaihe 2 keskeytetty manuaalisesti.")
             break
 
     cv2.destroyAllWindows()
-    print("Kaikki operaatiot suoritettu onnistuneesti.")
 
 if __name__ == "__main__":
     main()
