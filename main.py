@@ -7,12 +7,10 @@ from flask import Flask, Response
 app = Flask(__name__)
 
 def generoi_videovirta():
-    # Tähän kirjoitatte sen tiedoston nimen, jota haluatte kulloinkin ajaa
+    # Kirjoitetaan tiedosto, jota halutaan ajaa
     tiedosto = "dualtarget.mcap" 
     print("=== SYVYYSKAMERA JA KIRURGINEN PAIKKAUS (STRIIMAUS) ===")
     
-    # SIISTITTY: Koska dataReading tietää jo oletuksena että haetaan syvyysdataa,
-    # meidän riittää antaa sille vain tiedoston nimi! Ei enää pitkiä topic-rimpsuja.
     lukija_syvyys = MCAPReader(kohdetiedosto=tiedosto)
     
     for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
@@ -36,7 +34,7 @@ def generoi_videovirta():
         # 2. Värjäys (JET-lämpökartta)
         varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
 
-        # --- WEB-STRIIMAUS TAIKA ---
+        # Web-striimaus
         ret, buffer = cv2.imencode('.jpg', varitetty_syvyys)
         if not ret:
             continue

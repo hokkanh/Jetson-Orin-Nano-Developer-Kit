@@ -5,5 +5,5 @@ class Visualizer:
         pass
 
     def varita_syvyys(self, paikattu_kuva):
-        #Ottaa harmaasävyisen syvyyskuvan ja muuttaa sen JET-lämpökartaksi.
+        # Ottaa harmaasävyisen syvyyskuvan ja muuttaa sen JET-lämpökartaksi.
         return cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
