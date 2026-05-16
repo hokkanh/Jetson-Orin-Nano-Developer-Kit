@@ -9,7 +9,7 @@ app = Flask(__name__)
 def generoi_videovirta():
     # Kirjoitetaan tiedosto, jota halutaan ajaa
     tiedosto = "dualtarget.mcap" 
-    print("=== SYVYYSKAMERA JA KIRURGINEN PAIKKAUS (STRIIMAUS) ===")
+    print("=== SYVYYSKAMERA JA MORFOLOGINEN OPEROINTI ===")
     
     lukija_syvyys = MCAPReader(kohdetiedosto=tiedosto)
     
