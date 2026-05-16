@@ -1,23 +1,19 @@
 from dataReading import MCAPReader
-from visualization import Visualizer  # Tuodaan siistitty työkalu takaisin
 import cv2
 import numpy as np
 from flask import Flask, Response
 
+# Alustetaan kevyt Web-palvelin
 app = Flask(__name__)
 
 def generoi_videovirta():
+    # Tähän kirjoitatte sen tiedoston nimen, jota haluatte kulloinkin ajaa
     tiedosto = "dualtarget.mcap" 
     print("=== SYVYYSKAMERA JA KIRURGINEN PAIKKAUS (STRIIMAUS) ===")
     
-    lukija_syvyys = MCAPReader(
-        data_dir="data/mcap_files", 
-        kohdetiedosto=tiedosto, 
-        topic="/camera/camera/depth/image_rect_raw"
-    )
-    
-    # Alustetaan visualisointiluokka
-    silmat = Visualizer()
+    # SIISTITTY: Koska dataReading tietää jo oletuksena että haetaan syvyysdataa,
+    # meidän riittää antaa sille vain tiedoston nimi! Ei enää pitkiä topic-rimpsuja.
+    lukija_syvyys = MCAPReader(kohdetiedosto=tiedosto)
     
     for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
         # 1. Skaalataan data 8-bittiseksi
@@ -37,10 +33,10 @@ def generoi_videovirta():
         paikattu_kuva = skaalattu.copy()
         paikattu_kuva[maski == 255] = arvattu_tausta[maski == 255]
         
-        # 2. VÄRJÄYS (Kutsutaan nyt erillistä luokkaa)
-        varitetty_syvyys = silmat.varita_syvyys(paikattu_kuva)
+        # 2. Värjäys (JET-lämpökartta)
+        varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
 
-        # --- WEB-STRIIMAUS ---
+        # --- WEB-STRIIMAUS TAIKA ---
         ret, buffer = cv2.imencode('.jpg', varitetty_syvyys)
         if not ret:
             continue
@@ -49,11 +45,12 @@ def generoi_videovirta():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
+# Reitti, joka tarjoilee videon selaimeen
 @app.route('/')
 def video_feed():
     return Response(generoi_videovirta(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
-    print("🚀ALGORITMI VALMIINA!🚀")
+    print("🚀 ALGORITMI VALMIINA!🚀")
     print("Mene oman läppärin selaimella osoitteeseen: http://<jetsonin_ip_osoite>:5000")
     app.run(host='0.0.0.0', port=5000, debug=False)
