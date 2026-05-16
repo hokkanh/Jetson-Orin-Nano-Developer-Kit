@@ -1,54 +1,36 @@
-from dataReading import MCAPReader
-import cv2
+from pathlib import Path
 import numpy as np
-from flask import Flask, Response
+import logging
+from mcap_ros2.reader import read_ros2_messages
 
-# Alustetaan HTTP-palvelin (Flask) reaaliaikaista datansiirtoa varten
-app = Flask(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
-def generoi_videovirta():
-    # Määritetään käsiteltävä MCAP-tallennustiedosto
-    tiedosto = "dualtarget.mcap" 
-    print("=== SYVYYSKAMERADATAN REAALIAIKAINEN ENNALLISTAMINEN ===")
-    
-    lukija_syvyys = MCAPReader(kohdetiedosto=tiedosto)
-    
-    for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
-        # 1. Normalisoidaan etäisyysdata ja kvantisoidaan se 8-bittiseen esitysmuotoon
-        skaalattu = np.clip(syvyyskuva * (255.0 / 8000.0), 0, 255).astype(np.uint8)
+class MCAPReader:
+    # Kohdetiedostolla on nyt oletusnimi, ja se otetaan suoraan käyttöön
+    def __init__(self, data_dir: str = "data/mcap_files", kohdetiedosto: str = "dualtarget.mcap", topic: str = "/camera/camera/depth/image_rect_raw"):
+        self.data_dir = Path(data_dir)
+        self.topic = topic
         
-        # VAIHE A: Virheellisten havaintojen ja sokeiden pisteiden segmentointi kynnystyksellä
-        _, pohjamaski = cv2.threshold(skaalattu, 5, 255, cv2.THRESH_BINARY_INV)
-        
-        # VAIHE B: Binäärimaskin morfologinen laajennus (Dilation) raja-alueiden kattamiseksi
-        ydin = np.ones((5, 5), np.uint8)
-        maski = cv2.dilate(pohjamaski, ydin, iterations=1)
-        
-        # VAIHE C: Spatiaalisen tausta-estimaatin laskenta epälineaarisella mediaanisuodatuksella
-        arvattu_tausta = cv2.medianBlur(skaalattu, 21)
-        
-        # VAIHE D: Maskipohjainen datan imputointi (Image Inpainting) ja ennallistaminen
-        paikattu_kuva = skaalattu.copy()
-        paikattu_kuva[maski == 255] = arvattu_tausta[maski == 255]
-        
-        # 2. Pseudo-värjäys spatiaalisen hahmottamisen parantamiseksi (JET-värikartta)
-        varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
+        # Luodaan polku tiedostoon
+        self.mcap_polku = self.data_dir / kohdetiedosto
+        logger.info(f"Asetettu lukemaan tiedosto: {self.mcap_polku.name}")
 
-        # Enkoodataan prosessoitu matriisi JPEG-muotoon ja jaetaan MJPEG-videovirtana
-        ret, buffer = cv2.imencode('.jpg', varitetty_syvyys)
-        if not ret:
-            continue
+    def lue_kuvat_generaattorina(self):
+        logger.info(f"Luetaan kanavaa {self.topic} tiedostosta: {self.mcap_polku.name}")
+        try:
+            # 2. Luetaan tiedosto
+            iterator = read_ros2_messages(str(self.mcap_polku), topics=[self.topic])
             
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-
-# HTTP-päätepiste videovirran välittämiseksi asiakasohjelmalle
-@app.route('/')
-def video_feed():
-    return Response(generoi_videovirta(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-if __name__ == "__main__":
-    print("🚀 ALGORITMI VALMIINA!🚀")
-    print("Mene oman läppärin selaimella osoitteeseen: http://<jetsonin_ip_osoite>:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+            for viesti in iterator:
+                img_msg = viesti.ros_msg
+                raakadata = bytes(img_msg.data)
+                
+                # Tulkitaan data 16-bittiseksi syvyysmatriisiksi
+                matriisi = np.frombuffer(raakadata, dtype="<u2")
+                
+                kuva_2d = matriisi.reshape((img_msg.height, img_msg.width))
+                yield kuva_2d
+                
+        except Exception as e:
+            logger.error(f"Virhe tiedoston {self.mcap_polku.name} lukemisessa: {e}")

@@ -3,38 +3,38 @@ import cv2
 import numpy as np
 from flask import Flask, Response
 
-# Alustetaan kevyt Web-palvelin
+# Alustetaan HTTP-palvelin (Flask) reaaliaikaista datansiirtoa varten
 app = Flask(__name__)
 
 def generoi_videovirta():
-    # Kirjoitetaan tiedosto, jota halutaan ajaa
+    # Määritetään käsiteltävä MCAP-tallennustiedosto
     tiedosto = "dualtarget.mcap" 
-    print("=== SYVYYSKAMERA JA MORFOLOGINEN OPEROINTI ===")
+    print("=== SYVYYSKAMERADATAN REAALIAIKAINEN ENNALLISTAMINEN ===")
     
     lukija_syvyys = MCAPReader(kohdetiedosto=tiedosto)
     
     for syvyyskuva in lukija_syvyys.lue_kuvat_generaattorina():
-        # 1. Skaalataan data 8-bittiseksi
+        # 1. Normalisoidaan etäisyysdata ja kvantisoidaan se 8-bittiseen esitysmuotoon
         skaalattu = np.clip(syvyyskuva * (255.0 / 8000.0), 0, 255).astype(np.uint8)
         
-        # VAIHE A: Sokeat pisteet ja nollakohdat
+        # VAIHE A: Virheellisten havaintojen ja sokeiden pisteiden segmentointi kynnystyksellä
         _, pohjamaski = cv2.threshold(skaalattu, 5, 255, cv2.THRESH_BINARY_INV)
         
-        # VAIHE B: Maskin laajennus
+        # VAIHE B: Binäärimaskin morfologinen laajennus (Dilation) raja-alueiden kattamiseksi
         ydin = np.ones((5, 5), np.uint8)
         maski = cv2.dilate(pohjamaski, ydin, iterations=1)
         
-        # VAIHE C: Tausta-arvaus
+        # VAIHE C: Spatiaalisen tausta-estimaatin laskenta epälineaarisella mediaanisuodatuksella
         arvattu_tausta = cv2.medianBlur(skaalattu, 21)
         
-        # VAIHE D: Kirurginen paikkaus
+        # VAIHE D: Maskipohjainen datan imputointi (Image Inpainting) ja ennallistaminen
         paikattu_kuva = skaalattu.copy()
         paikattu_kuva[maski == 255] = arvattu_tausta[maski == 255]
         
-        # 2. Värjäys (JET-lämpökartta)
+        # 2. Pseudo-värjäys spatiaalisen hahmottamisen parantamiseksi (JET-värikartta)
         varitetty_syvyys = cv2.applyColorMap(paikattu_kuva, cv2.COLORMAP_JET)
 
-        # Web-striimaus
+        # Enkoodataan prosessoitu matriisi JPEG-muotoon ja jaetaan MJPEG-videovirtana
         ret, buffer = cv2.imencode('.jpg', varitetty_syvyys)
         if not ret:
             continue
@@ -43,7 +43,7 @@ def generoi_videovirta():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-# Reitti, joka tarjoilee videon selaimeen
+# HTTP-päätepiste videovirran välittämiseksi asiakasohjelmalle
 @app.route('/')
 def video_feed():
     return Response(generoi_videovirta(), mimetype='multipart/x-mixed-replace; boundary=frame')
