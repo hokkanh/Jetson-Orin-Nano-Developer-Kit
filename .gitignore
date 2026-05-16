@@ -1,1 +1,73 @@
+# ==========================================
+# KOVA LABS HACKATHON - OPTIMOITU .GENERIC
+# ==========================================
+
+# 1. ROS 2 (Colcon & Isaac ROS)
+# ------------------------------------------
+build/
+install/
+log/
+.irradiated/
+*_isolated/
+
+# 2. Docker & Jetson / Isaac ROS -ympäristö
+# ------------------------------------------
+.docker/
+*.log
+docker-compose.override.yml
+
+# 3. Raskas Sensoridata (RealSense Bagit & Videot)
+# ------------------------------------------
+# Estetään kaikki isot datatiedostot
+*.mcap
+*.db3
+*.bag
+*.mp4
+*.avi
+*.png
+*.jpg
+*.npy
+# Yleiset datakansiot (jos joku luo sellaisen paikallisesti)
+data/
+datasets/
+realsense_data/
+
+# 4. Tekoäly & TensorRT (YOLO-mallit)
+# ------------------------------------------
+# PyTorch-painot ja käännetyt Jetson-moottorit ovat liian suuria ja laitekohtaisia
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+weights/
+models/
+
+# 5. Python-ympäristöt
+# ------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
 .venv/
+conda-env/
+.env
+
+# 6. C++ / CMake (Suorituskykyiset nodet)
+# ------------------------------------------
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+*.o
+*.obj
+
+# 7. IDE:t ja Käyttöjärjestelmä
+# ------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
