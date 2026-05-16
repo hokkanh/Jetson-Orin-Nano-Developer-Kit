@@ -55,7 +55,7 @@ def video_feed():
     return Response(generoi_videovirta(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
-    print("🚀 ALGORITMI VALMIINA!")
+    print("🚀ALGORITMI VALMIINA!🚀")
     print("Mene oman läppärin selaimella osoitteeseen: http://<jetsonin_ip_osoite>:5000")
     # host='0.0.0.0' sallii yhteydet kaikista samassa Wi-Fi:ssä olevista koneista
     app.run(host='0.0.0.0', port=5000, debug=False)
