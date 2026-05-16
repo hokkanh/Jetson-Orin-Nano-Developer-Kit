@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 def generoi_videovirta():
     # HUOM: Varmista, että "flyover.mcap" on oikea tiedostonimi Jetsonilla!
-    tiedosto = "flyover.mcap" 
+    tiedosto = "dualtarget.mcap" 
     print("=== SYVYYSKAMERA JA KIRURGINEN PAIKKAUS (STRIIMAUS) ===")
     
     lukija_syvyys = MCAPReader(
