@@ -9,7 +9,7 @@ from flask import Flask, Response
 app = Flask(__name__)
 
 def generoi_videovirta():
-    tiedosto = "dualtarget.mcap" 
+    tiedosto = "flyover.mcap" 
     
     print("=== VAIHE 1: TAKTINEN HUD (Infrapuna + YOLO) ===")
     lukija_infra = MCAPReader(data_dir="data/mcap_files", kohdetiedosto=tiedosto, topic="/camera/camera/infra1/image_rect_raw")
