@@ -6,7 +6,7 @@ import cv2
 def main():
     print("Käynnistetään taktinen HUD-järjestelmä...")
     
-    lukija = MCAPReader(data_dir="data/mcap_files", kohdetiedosto="dualtarget.mcap")
+    lukija = MCAPReader(data_dir="data/mcap_files", kohdetiedosto="flyover.mcap")
     aivot = YOLODetector()
     silmat = Visualizer()
     
