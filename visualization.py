@@ -94,5 +94,6 @@ class Visualizer:
         # Piirretään tyylikäs valkoinen reunus tutkan ympärille
         cv2.rectangle(naytettava_kuva, (x_alku, y_alku), (x_loppu, y_loppu), (255, 255, 255), 1)
 
-        # Palautetaan tulos
-        return naytettava_kuva
+        # Näytetään tulos
+        cv2.imshow(self.ikkunan_nimi, naytettava_kuva)
+        return cv2.waitKey(10) & 0xFF
